@@ -1,0 +1,89 @@
+services:
+  baas-engine:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile
+    container_name: baas-engine
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      - BAAAS_HOST=0.0.0.0
+      - BAAAS_PORT=8000
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=redis://redis:6379/0
+      - WEBSHARE_API_KEY=${WEBSHARE_API_KEY}
+      - JWT_SECRET=${JWT_SECRET}
+      - PROXY_ENABLED=true
+      - PROXY_STRATEGY=direct_first
+      - BAAAS_ENV=production
+    volumes:
+      - ../src:/app/src:ro
+      - ../mcp:/app/mcp:ro
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: "2.0"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; r=httpx.get('http://localhost:8000/health'); assert r.status_code==200"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  baas-mcp:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile
+    container_name: baas-mcp
+    restart: unless-stopped
+    command: ["python", "mcp/server.py", "--transport", "http", "--host", "0.0.0.0", "--port", "8001"]
+    ports:
+      - "8001:8001"
+      - "8002:8002"
+    env_file:
+      - .env
+    environment:
+      - BAAAS_API_URL=http://baas-engine:8000
+      - MCP_HOST=0.0.0.0
+      - MCP_PORT=8001
+    volumes:
+      - ../src:/app/src:ro
+      - ../mcp:/app/mcp:ro
+    depends_on:
+      baas-engine:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "0.5"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; r=httpx.get('http://localhost:8002/health'); assert r.status_code==200"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  redis:
+    image: redis:7-alpine
+    container_name: baas-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: "0.25"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  redis_data:

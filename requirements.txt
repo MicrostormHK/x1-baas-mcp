@@ -1,0 +1,3 @@
+# X1-BaaS MCP Server — Minimal Dependencies
+mcp[cli]>=2.0.0,<3.0
+httpx>=0.28.0,<1.0

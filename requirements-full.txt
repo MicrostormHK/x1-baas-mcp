@@ -1,0 +1,42 @@
+# X1-BaaS-Engine — Dependencies
+
+# Server
+fastapi>=0.115.0,<1.0
+uvicorn[standard]>=0.34.0,<1.0
+gunicorn>=22.0.0,<23.0
+pydantic>=2.10.0,<3.0
+
+# Stealth Browser
+camoufox[geoip]>=0.4.0,<1.0
+playwright>=1.50.0,<2.0
+
+# DOM Cleaning & Markdown
+beautifulsoup4>=4.12.0,<5.0
+readabilipy>=0.3.0,<1.0
+markdownify>=0.14.0,<1.0
+lxml>=5.0.0,<6.0
+
+# x402 Payment Protocol
+x402[evm,fastapi]>=0.3.0,<1.0
+cdp-sdk>=0.1.0,<1.0
+
+# MCP Server
+mcp[cli]>=2.0.0,<3.0
+
+# Database
+sqlalchemy[asyncio]>=2.0.0,<3.0
+asyncpg>=0.30.0,<1.0
+alembic>=1.14.0,<2.0
+redis>=5.0.0,<6.0
+
+# Auth
+python-jose[cryptography]>=3.3.0,<4.0
+passlib[bcrypt]>=1.7.4,<2.0
+bcrypt>=4.0.0,<5.0
+python-multipart>=0.0.9,<1.0
+pydantic[email]>=2.10.0,<3.0
+
+# HTTP & Testing
+httpx>=0.28.0,<1.0
+pytest>=8.0.0,<9.0
+pytest-asyncio>=0.25.0,<1.0
