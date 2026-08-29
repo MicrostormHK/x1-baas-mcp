@@ -27,7 +27,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
-    "postgresql+asyncpg://microstorm:ba2fe9f79b6cbec1889b58378468449e4e9aafbccd4d6577@localhost:5432/microstorm",
+    "postgresql+asyncpg://baas:changeme@localhost:5432/baas",
 )
 
 # Naming convention for Alembic auto-generated constraint names
