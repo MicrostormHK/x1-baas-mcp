@@ -12,10 +12,9 @@ services:
     environment:
       - BAAAS_HOST=0.0.0.0
       - BAAAS_PORT=8000
-      - DATABASE_URL=${DATABASE_URL}
       - REDIS_URL=redis://redis:6379/0
-      - WEBSHARE_API_KEY=${WEBSHARE_API_KEY}
-      - JWT_SECRET=${JWT_SECRET}
+      - WEBSHARE_API_KEY=${WEBSHARE_API_KEY:-}
+      - JWT_SECRET=${JWT_SECRET:-}
       - PROXY_ENABLED=true
       - PROXY_STRATEGY=direct_first
       - BAAAS_ENV=production
