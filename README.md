@@ -2,6 +2,7 @@
 
 > Stealth web scraping engine with native MCP integration and x402 micropayments. Returns clean, LLM-ready Markdown from any URL.
 
+[![smithery badge](https://smithery.ai/badge/tazpal/x1-baas)](https://smithery.ai/servers/tazpal/x1-baas)
 [![MCP Compatible](https://img.shields.io/badge/MCP-compatible-blue)](https://modelcontextprotocol.io)
 [![x402](https://img.shields.io/badge/x402-payment%20protocol-green)](https://x402.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
