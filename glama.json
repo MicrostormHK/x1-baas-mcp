@@ -1,6 +1,8 @@
 {
+  "$schema": "https://glama.ai/mcp/schemas/connector.json",
   "name": "X1-BaaS",
   "description": "Stealth web scraping API for AI agents with x402 micropayments",
   "homepage": "https://baas.tazpal.com",
-  "repository": "https://github.com/MicrostormHK/x1-baas-mcp"
+  "repository": "https://github.com/MicrostormHK/x1-baas-mcp",
+  "claim": "glama_claim_AENtSmre_frHDp2clSZxOayzZ8ERZejd"
 }
