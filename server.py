@@ -28,7 +28,6 @@ from typing import Optional
 # Configuration
 # ---------------------------------------------------------------------------
 BAAAS_API_URL = os.getenv("BAAAS_API_URL", "http://localhost:8000")
-BAAAS_API_KEY = os.getenv("BAAAS_API_KEY", "")
 MCP_HOST = os.getenv("MCP_HOST", "0.0.0.0")
 MCP_PORT = int(os.getenv("MCP_PORT", "8001"))
 
@@ -39,23 +38,64 @@ logging.basicConfig(
 logger = logging.getLogger("baas-mcp")
 
 # ---------------------------------------------------------------------------
+# Caller authentication pass-through
+#
+# The MCP server is a thin protocol translation layer (JSON-RPC ↔ REST). It
+# holds NO credentials of its own and never authenticates on the caller's
+# behalf. Every request is forwarded to the BaaS engine verbatim: the caller's
+# own auth headers (if any) are passed through, and the engine's response —
+# including a 402 Payment Required carrying x402 payment requirements — is
+# relayed back to the caller unchanged.
+#
+#   Authorization: Bearer <api_key>  — baas_live_* key (subscription)
+#   PAYMENT-SIGNATURE / X-PAYMENT    — x402 payment proof (pay-per-scrape)
+#
+# With no auth header, the engine responds 402 with x402 payment requirements,
+# which the MCP server relays so the caller can pay (Base USDC and/or Solana)
+# and retry with a payment proof.
+# ---------------------------------------------------------------------------
+
+_FORWARD_AUTH_HEADERS = ("authorization", "payment-signature", "x-payment")
+
+
+def _caller_auth_headers(ctx: Optional["Context"]) -> dict[str, str]:
+    """Extract the caller's auth headers from the MCP request context.
+
+    Returns a dict of headers to forward to the engine. Empty when the caller
+    supplied no credentials (e.g. over stdio, which has no HTTP headers).
+    """
+    headers = getattr(ctx, "headers", None) if ctx is not None else None
+    if not headers:
+        return {}
+    return {
+        name: value
+        for name, value in headers.items()
+        if name.lower() in _FORWARD_AUTH_HEADERS
+    }
+
+
+# ---------------------------------------------------------------------------
 # MCP Server
 # ---------------------------------------------------------------------------
-from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver import Context, MCPServer
 
 mcp = MCPServer(
-    name="X1-BaaS-Engine",
-    title="Browser-as-a-Service for AI Agents",
+    name="X1-BaaS",
+    title="X1-BaaS — Stealth Web Scraping for AI Agents",
     description=(
         "Stealth web scraping engine optimized for autonomous AI agents. "
         "Returns clean Markdown content from any URL, with anti-bot bypass "
-        "(Cloudflare Turnstile, Datadome). Pay-per-call via x402 micro-settlements."
+        "(Cloudflare Turnstile, Datadome). Pay-per-call via x402 micropayments."
     ),
-    version="0.2.0",
-    website_url="https://github.com/x1-baas-engine",
+    version="0.3.2",
+    website_url="https://baas.tazpal.com",
     instructions=(
         "Use the `scrape` tool to fetch and extract web content as clean Markdown. "
         "The engine handles JavaScript rendering, anti-bot bypass, and DOM cleaning automatically. "
+        "The `scrape` tool is paid. If the request carries no API key "
+        "(`Authorization: Bearer baas_live_*`) or x402 payment proof, the engine "
+        "returns a 402 with x402 payment requirements (Base USDC and/or Solana), "
+        "which are relayed to you so you can pay and retry. "
         "Use `get_pricing` to check current pricing before scraping. "
         "Use `server_status` to check engine health and availability."
     ),
@@ -66,9 +106,18 @@ mcp = MCPServer(
 # Tools
 # ---------------------------------------------------------------------------
 
-@mcp.tool()
+@mcp.tool(
+    annotations={
+        "title": "Scrape Web Page",
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": True,
+    }
+)
 async def scrape(
     url: str,
+    output: Optional[str] = None,
     wait_for_selector: Optional[str] = None,
     timeout_ms: int = 20000,
     block_media: bool = True,
@@ -76,9 +125,17 @@ async def scrape(
     retry: bool = True,
     bypass_cache: bool = False,
     javascript: Optional[str] = None,
+    ctx: Optional[Context] = None,
 ) -> str:
     """
-    Scrape a URL and return clean Markdown content optimized for LLM context windows.
+    Scrape a URL and return content in your preferred format.
+
+    Supported output formats:
+    - markdown (default): Clean LLM-ready Markdown text
+    - screenshot: PNG/JPEG image of the page
+    - pdf: PDF document of the page
+    - csv: Table data extracted as CSV
+    - html: Sanitized HTML with scripts/ads removed
 
     This tool handles:
     - JavaScript rendering (SPA, dynamic content)
@@ -91,6 +148,7 @@ async def scrape(
 
     Args:
         url: The URL to scrape (must start with http:// or https://)
+        output: Output format: "markdown" (default), "screenshot", "pdf", "csv", "html"
         wait_for_selector: Optional CSS selector to wait for before extraction (e.g., ".article-content")
         timeout_ms: Navigation timeout in milliseconds (default: 20000, max: 120000)
         block_media: Block images/fonts/video for faster loading (default: true)
@@ -100,13 +158,18 @@ async def scrape(
         javascript: Custom JavaScript to execute after page load (e.g., "window.scrollTo(0, 1000)")
 
     Returns:
-        Clean Markdown content extracted from the page, or an error message.
+        Content in the requested format, or an error message.
     """
     import httpx
 
+    # Thin pass-through: forward the caller's auth headers (if any) verbatim to
+    # the engine. Never fall back to an embedded server-side key. When the
+    # caller supplies no credentials, the engine responds 402 with x402 payment
+    # requirements, which are relayed to the caller unchanged (see 402 branch).
+    forwarded = _caller_auth_headers(ctx)
+
     headers = {"Content-Type": "application/json"}
-    if BAAAS_API_KEY:
-        headers["Authorization"] = f"Bearer {BAAAS_API_KEY}"
+    headers.update(forwarded)
 
     payload = {
         "url": url,
@@ -115,6 +178,8 @@ async def scrape(
         "retry": retry,
         "bypass_cache": bypass_cache,
     }
+    if output:
+        payload["output"] = output
     if wait_for_selector:
         payload["wait_for_selector"] = wait_for_selector
     if wait_strategy:
@@ -127,11 +192,13 @@ async def scrape(
             resp = await client.post(f"{BAAAS_API_URL}/v1/scrape", json=payload, headers=headers)
 
             if resp.status_code == 402:
-                detail = resp.json().get("detail", {})
-                return (
-                    f"PAYMENT REQUIRED: This scrape costs ${detail.get('accepts', [{}])[0].get('price', '?')} USDC. "
-                    f"Include X-PAYMENT header with signed EIP-3009 permit."
-                )
+                # Pass through the engine's x402 payment requirements verbatim
+                # so the caller can pay (Base USDC and/or Solana) and retry with
+                # a payment proof. The engine also sends the envelope in the
+                # `PAYMENT-REQUIRED` response header (base64), but the tool
+                # result carries the full JSON body so any x402 client can parse
+                # the requirements directly.
+                return resp.text
 
             if resp.status_code == 401:
                 return "AUTHENTICATION FAILED: Invalid or missing API key."
@@ -166,7 +233,15 @@ async def scrape(
         return f"ERROR: {exc}"
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations={
+        "title": "Get Pricing",
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": False,
+    }
+)
 async def get_pricing() -> str:
     """
     Check current pricing and payment requirements for the BaaS scrape engine.
@@ -201,7 +276,15 @@ async def get_pricing() -> str:
         return f"ERROR fetching pricing: {exc}"
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations={
+        "title": "Server Status",
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": False,
+    }
+)
 async def server_status() -> str:
     """
     Check the BaaS engine health and operational status.
@@ -214,8 +297,6 @@ async def server_status() -> str:
     import httpx
 
     headers = {}
-    if BAAAS_API_KEY:
-        headers["Authorization"] = f"Bearer {BAAAS_API_KEY}"
 
     try:
         async with httpx.AsyncClient(timeout=10) as client:
@@ -260,8 +341,6 @@ async def status_resource() -> str:
     """Current BaaS engine status and diagnostics."""
     import httpx
     headers = {}
-    if BAAAS_API_KEY:
-        headers["Authorization"] = f"Bearer {BAAAS_API_KEY}"
     try:
         async with httpx.AsyncClient(timeout=10) as client:
             resp = await client.get(f"{BAAAS_API_URL}/health", headers=headers)

@@ -6,13 +6,13 @@ services:
     container_name: baas-engine
     restart: unless-stopped
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     env_file:
       - .env
     environment:
       - BAAAS_HOST=0.0.0.0
       - BAAAS_PORT=8000
-      - REDIS_URL=redis://redis:6379/0
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
       - WEBSHARE_API_KEY=${WEBSHARE_API_KEY:-}
       - JWT_SECRET=${JWT_SECRET:-}
       - PROXY_ENABLED=true
@@ -40,10 +40,8 @@ services:
     restart: unless-stopped
     command: ["python", "mcp/server.py", "--transport", "http", "--host", "0.0.0.0", "--port", "8001"]
     ports:
-      - "8001:8001"
-      - "8002:8002"
-    env_file:
-      - .env
+      - "127.0.0.1:8001:8001"
+      - "127.0.0.1:8002:8002"
     environment:
       - BAAAS_API_URL=http://baas-engine:8000
       - MCP_HOST=0.0.0.0
@@ -69,17 +67,18 @@ services:
     image: redis:7-alpine
     container_name: baas-redis
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis_data:/data
     restart: unless-stopped
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}", "--rename-command", "FLUSHALL", "", "--rename-command", "FLUSHDB", "", "--rename-command", "CONFIG", "", "--appendonly", "yes"]
     deploy:
       resources:
         limits:
           memory: 256M
           cpus: "0.25"
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
       interval: 30s
       timeout: 5s
       retries: 3

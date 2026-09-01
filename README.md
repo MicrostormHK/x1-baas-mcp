@@ -42,13 +42,16 @@ Or use stdio transport:
       "command": "npx",
       "args": ["-y", "x1-baas-mcp"],
       "env": {
-        "BAAAS_API_URL": "https://api.tazpal.com",
-        "BAAAS_API_KEY": "your-api-key"
+        "BAAAS_API_URL": "https://api.tazpal.com"
       }
     }
   }
 }
 ```
+
+> **Note:** The MCP server is a thin pass-through — it holds no credentials.
+> Over HTTP, callers present their own API key or x402 payment proof.
+> Over stdio (no HTTP headers), scrape calls return x402 payment requirements.
 
 ### Option 2: Direct API Call
 
@@ -154,7 +157,6 @@ curl http://localhost:8002/health
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `BAAAS_API_URL` | `http://localhost:8000` | BaaS engine URL |
-| `BAAAS_API_KEY` | (empty) | API key for auth |
 | `MCP_HOST` | `0.0.0.0` | MCP server bind host |
 | `MCP_PORT` | `8001` | MCP server port |
 | `X402_ENABLED` | `true` | Enable x402 payments |
